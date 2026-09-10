@@ -260,6 +260,7 @@ class EnchantmentSelector(tk.Toplevel):
         self.geometry("420x480")
         self.resizable(False, False)
         self.result = None
+        self._selected_data = None
         self.transient(parent)
         self.grab_set()
 
@@ -270,7 +271,12 @@ class EnchantmentSelector(tk.Toplevel):
 
         list_frame = ttk.Frame(self)
         list_frame.pack(fill="both", expand=True, padx=5, pady=5)
-        self.listbox = tk.Listbox(list_frame, height=14, font=("Microsoft YaHei", 10))
+        # Keep the enchantment selected while the user operates the level
+        # combobox. With exportselection=True, the combobox can clear it.
+        self.listbox = tk.Listbox(
+            list_frame, height=14, font=("Microsoft YaHei", 10),
+            exportselection=False,
+        )
         scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=self.listbox.yview)
         self.listbox.configure(yscrollcommand=scrollbar.set)
         self.listbox.pack(side="left", fill="both", expand=True)
@@ -307,6 +313,7 @@ class EnchantmentSelector(tk.Toplevel):
 
     def _filter(self):
         s = self.search_var.get().lower().strip()
+        self._selected_data = None
         self.listbox.delete(0, "end")
         self.listbox._idx_map = {}
         for name, max_lv, cn, treasure in self.all_data:
@@ -325,6 +332,7 @@ class EnchantmentSelector(tk.Toplevel):
         data = self.listbox._idx_map.get(sel[0])
         if not data:
             return
+        self._selected_data = data
         name, max_lv = data
         levels = [str(i) for i in range(1, max_lv + 1)]
         self.level_combo["values"] = levels
@@ -353,14 +361,14 @@ class EnchantmentSelector(tk.Toplevel):
 
     def _confirm(self):
         sel = self.listbox.curselection()
-        if not sel:
-            return
-        data = self.listbox._idx_map.get(sel[0])
+        data = self.listbox._idx_map.get(sel[0]) if sel else self._selected_data
         if not data:
+            messagebox.showwarning("提示", "请先选择一个附魔", parent=self)
             return
         try:
             lv = int(self.level_var.get())
         except ValueError:
+            messagebox.showwarning("提示", "请选择附魔等级", parent=self)
             return
         self.result = (data[0], lv)
         self.destroy()
@@ -626,7 +634,7 @@ class TradeExportApp:
         self.frame_locate.pack(fill="x", padx=10, pady=(0, 5))
 
         # 多槽位输入区：每个槽位一行（条目 + 详情），按游戏内顺序排列
-        ttk.Label(self.frame_locate, text="填写本等级的所有交易槽位（按游戏内顺序），每个槽位选择条目并填写详情：",
+        ttk.Label(self.frame_locate, text="填写本等级的所有交易槽位；多次观测请按刷新先后顺序添加：",
                   foreground="gray", font=("", 8)).pack(anchor="w")
         self.locate_slots_frame = ttk.Frame(self.frame_locate)
         self.locate_slots_frame.pack(fill="x", pady=2)
@@ -1080,61 +1088,55 @@ class TradeExportApp:
             self._locate_collapsed = True
 
     def _build_obs_match_fn(self):
-        """每个观测是一个完整的槽位快照，按位置 i → i 精确匹配。"""
-        obs_list = list(self.observations)
-        if not obs_list:
+        """构建单次观测匹配函数；槽位按游戏内位置 i → i 精确匹配。"""
+        if not self.observations:
             return None
 
-        def match_fn(trades):
-            for obs in obs_list:
-                slots = obs["slots"]
-                if len(slots) != len(trades):
+        def match_fn(trades, obs):
+            slots = obs["slots"]
+            if len(slots) != len(trades):
+                return False
+
+            for si, slot in enumerate(slots):
+                if si >= len(trades):
+                    return False
+                t = trades[si]
+                ent_info = slot["entry_info"]
+                tp = ent_info["type"]
+                t_tp = t.get("type", "other")
+
+                if tp != t_tp:
                     return False
 
-                for si, slot in enumerate(slots):
-                    if si >= len(trades):
+                ent_entry = ent_info["data"].get("entry", "")
+                t_entry = t.get("entry", "")
+                if tp in ("other", "dyed_equipment") and ent_entry != t_entry:
+                    return False
+
+                if tp == "enchanted_book":
+                    if (t.get("enchantment") != slot.get("enchantment")
+                            or t.get("level") != slot.get("ench_level")):
                         return False
-                    t = trades[si]
-                    ent_info = slot["entry_info"]
-                    tp = ent_info["type"]
-                    t_tp = t.get("type", "other")
-
-                    if tp != t_tp:
+                    if (slot.get("price") is not None
+                            and t.get("final_cost") != slot["price"]):
                         return False
-
-                    # 检查条目匹配
-                    ent_entry = ent_info["data"].get("entry", "")
-                    t_entry = t.get("entry", "")
-                    if tp in ("other", "dyed_equipment"):
-                        if ent_entry != t_entry:
-                            return False
-
-                    # 检查类型特定详情
-                    if tp == "enchanted_book":
-                        if (t.get("enchantment") != slot.get("enchantment")
-                                or t.get("level") != slot.get("ench_level")):
-                            return False
-                        if (slot.get("price") is not None
-                                and t.get("final_cost") != slot["price"]):
-                            return False
-                    elif tp == "enchanted_equipment":
-                        t_enchs = set(tuple(e) for e in t.get("enchantments", []))
-                        s_enchs = set(tuple(e) for e in slot.get("enchantments", []))
-                        if t_enchs != s_enchs:
-                            return False
-                        if (slot.get("price") is not None
-                                and t.get("final_cost") != slot["price"]):
-                            return False
-                    elif tp == "suspicious_stew":
-                        if t.get("effect") != slot.get("effect"):
-                            return False
-                    elif tp == "tipped_arrow":
-                        if t.get("potion") != slot.get("potion"):
-                            return False
-                    elif tp == "dyed_equipment":
-                        dyes = t.get("dyes", [])
-                        if slot.get("dye") not in dyes:
-                            return False
+                elif tp == "enchanted_equipment":
+                    t_enchs = set(tuple(e) for e in t.get("enchantments", []))
+                    s_enchs = set(tuple(e) for e in slot.get("enchantments", []))
+                    if t_enchs != s_enchs:
+                        return False
+                    if (slot.get("price") is not None
+                            and t.get("final_cost") != slot["price"]):
+                        return False
+                elif tp == "suspicious_stew":
+                    if t.get("effect") != slot.get("effect"):
+                        return False
+                elif tp == "tipped_arrow":
+                    if t.get("potion") != slot.get("potion"):
+                        return False
+                elif tp == "dyed_equipment":
+                    if slot.get("dye") not in t.get("dyes", []):
+                        return False
 
             return True
 
@@ -1168,20 +1170,29 @@ class TradeExportApp:
         self.locate_status.config(text="搜索中...", foreground="blue")
         self.root.update()
 
-        # 流式推进：创建一个 RNG，顺序推进，避免每次重建
+        # 第 j 条观测匹配 offset+j；流式推进一次即可覆盖所有偏移。
         rng = self.predictor.create_rng(prof, level)
-        matching = []
-        for off in range(search_range):
-            if off % 500 == 0:
-                self.locate_status.config(text=f"搜索中... {off}/{search_range}", foreground="blue")
+        obs_list = list(self.observations)
+        candidates = bytearray(b"\x01") * search_range
+        generations_to_check = search_range + len(obs_list) - 1
+
+        for generation in range(generations_to_check):
+            if generation % 500 == 0:
+                progress = min(generation, search_range)
+                self.locate_status.config(text=f"搜索中... {progress}/{search_range}", foreground="blue")
                 self.root.update()
             try:
                 trades = self.predictor.simulate_trades(prof, level, rng)
-                if match_fn(trades):
-                    matching.append(off)
             except Exception:
-                pass
-            self.predictor._consume_trade_generation(rng, prof, level)
+                trades = None
+
+            for obs_index, obs in enumerate(obs_list):
+                start_offset = generation - obs_index
+                if 0 <= start_offset < search_range and candidates[start_offset]:
+                    if trades is None or not match_fn(trades, obs):
+                        candidates[start_offset] = 0
+
+        matching = [off for off, matched in enumerate(candidates) if matched]
 
         self.locate_result_list.delete(0, "end")
         if matching:
