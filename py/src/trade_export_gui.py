@@ -73,6 +73,20 @@ ENCHANTMENT_CN = {
 }
 ENCHANTMENT_EN = {v: k for k, v in ENCHANTMENT_CN.items()}
 
+# Build max level lookup for all filterable enchantments
+ENCHANT_MAX_LEVEL_MAP: dict = {}
+for _name, _max_lv in TRADEABLE_ENCHANTMENTS:
+    _cn = ENCHANTMENT_CN.get(_name, _name)
+    ENCHANT_MAX_LEVEL_MAP[_cn] = _max_lv
+    ENCHANT_MAX_LEVEL_MAP[_name] = _max_lv
+for _name, _max_lv in ON_TRADED_EQUIPMENT_ENCHANTMENTS:
+    _cn = ENCHANTMENT_CN.get(_name, _name)
+    if _cn not in ENCHANT_MAX_LEVEL_MAP:
+        ENCHANT_MAX_LEVEL_MAP[_cn] = _max_lv
+    if _name not in ENCHANT_MAX_LEVEL_MAP:
+        ENCHANT_MAX_LEVEL_MAP[_name] = _max_lv
+ALL_ENCHANTS_MAX_LEVEL = max(ENCHANT_MAX_LEVEL_MAP.values())
+
 LEVEL_NAMES = {1: "新手", 2: "学徒", 3: "老手", 4: "专家", 5: "大师"}
 
 STEW_CN = {
@@ -715,7 +729,7 @@ class TradeExportApp:
         # 用于动态填充下拉的选项缓存
         self._filter_type_vals = ["全部"]
         self._filter_ench_vals = ["全部"]
-        self._filter_lv_vals = ["任意"]
+        self._filter_lv_vals = ["任意", "可用最大值"] + [str(l) for l in range(1, ALL_ENCHANTS_MAX_LEVEL + 1)]
         self._filter_price_vals = ["全部价格"]
 
         # ── 结果预览区 ──
@@ -1328,7 +1342,7 @@ class TradeExportApp:
         if not self.current_data:
             self._filter_type_vals = ["全部"]
             self._filter_ench_vals = ["全部"]
-            self._filter_lv_vals = ["任意"]
+            self._filter_lv_vals = ["任意", "可用最大值"] + [str(l) for l in range(1, ALL_ENCHANTS_MAX_LEVEL + 1)]
             self._filter_price_vals = ["全部价格"]
         else:
             # 类型
@@ -1353,13 +1367,8 @@ class TradeExportApp:
                             enchs_seen.add(part)
             self._filter_ench_vals = ["全部"] + sorted(enchs_seen)
 
-            # 等级
-            lvs_seen = set()
-            for row in self.current_data:
-                lv = str(row[6])
-                if lv and lv != "0":
-                    lvs_seen.add(lv)
-            self._filter_lv_vals = ["任意"] + sorted(lvs_seen, key=int)
+            # 等级：默认展示所有可能等级（1~ALL_ENCHANTS_MAX_LEVEL）
+            self._filter_lv_vals = ["任意", "可用最大值"] + [str(l) for l in range(1, ALL_ENCHANTS_MAX_LEVEL + 1)]
 
             # 价格：收集实际存在的价格值
             prices_seen = set()
@@ -1388,19 +1397,35 @@ class TradeExportApp:
             w["price_combo"]["values"] = self._filter_price_vals
 
     def _on_rule_ench_change(self, rule_data: dict):
-        """当规则中附魔选择变化时，动态更新等级和价格下拉选项。"""
-        if not self.current_data:
-            return
+        """当规则中附魔选择变化时，动态更新等级选项为所选附魔的可交易等级范围。"""
         w = rule_data["widgets"]
         ench_sel = w["ench_var"].get()
 
         if ench_sel == "全部":
             w["lv_combo"]["values"] = self._filter_lv_vals
             w["price_combo"]["values"] = self._filter_price_vals
+            self._apply_rule_filter()
             return
 
-        # 收集匹配此附魔的等级和价格
-        lvs_seen = set()
+        # 从附魔名中提取纯名称（处理装备格式 "锋利 3" → "锋利"）
+        parts = ench_sel.rsplit(" ", 1)
+        if len(parts) == 2 and parts[1].isdigit():
+            ench_key = parts[0]
+        else:
+            ench_key = ench_sel
+
+        max_lv = ENCHANT_MAX_LEVEL_MAP.get(ench_key)
+        if max_lv is None:
+            for cn, lv in ENCHANT_MAX_LEVEL_MAP.items():
+                if ench_key.startswith(cn):
+                    max_lv = lv
+                    break
+        if max_lv is None:
+            max_lv = 5
+
+        w["lv_combo"]["values"] = ["任意", "可用最大值"] + [str(l) for l in range(1, max_lv + 1)]
+
+        # 价格选项保持预览数据
         prices_seen = set()
         for row in self.current_data:
             row_type = row[3]
@@ -1408,22 +1433,18 @@ class TradeExportApp:
             d2 = str(row[5]) if row[5] else ""
             if ench_sel not in d1 and ench_sel not in d2:
                 continue
-            lv = str(row[6])
-            if lv and lv != "0":
-                lvs_seen.add(lv)
             try:
                 p = int(row[7])
                 if 1 <= p <= 64:
                     prices_seen.add(p)
             except (ValueError, TypeError):
                 pass
-
-        lv_vals = ["任意"] + sorted(lvs_seen, key=int) if lvs_seen else ["任意"]
-        w["lv_combo"]["values"] = lv_vals
-
-        price_vals = ["全部价格"] + sorted([str(p) for p in prices_seen], key=int) if prices_seen else ["全部价格"]
+        price_vals = (["全部价格"] + sorted([str(p) for p in prices_seen], key=int)
+                     if prices_seen else ["全部价格"])
         price_vals += ["-- 百分比 --", "0%", "25%", "50%", "75%", "100%"]
         w["price_combo"]["values"] = price_vals
+
+        self._apply_rule_filter()
 
     def _add_filter_rule(self):
         """添加一条新筛选规则。"""
@@ -1468,7 +1489,7 @@ class TradeExportApp:
         ttk.Label(rule_frame, text="等级:").pack(side="left", padx=(5, 0))
         lv_var = tk.StringVar(value="任意")
         lv_combo = ttk.Combobox(rule_frame, textvariable=lv_var,
-                                values=self._filter_lv_vals, width=4, state="readonly")
+                                values=self._filter_lv_vals, width=8, state="readonly")
         lv_combo.pack(side="left", padx=2)
         lv_combo.bind("<<ComboboxSelected>>", lambda e: self._apply_rule_filter())
         w["lv_var"] = lv_var
@@ -1549,7 +1570,7 @@ class TradeExportApp:
 
         ttk.Label(rule_frame, text="等级:").pack(side="left", padx=(5, 0))
         lv_combo = ttk.Combobox(rule_frame, textvariable=w["lv_var"],
-                                values=self._filter_lv_vals, width=4, state="readonly")
+                                values=self._filter_lv_vals, width=8, state="readonly")
         lv_combo.pack(side="left", padx=2)
         lv_combo.bind("<<ComboboxSelected>>", lambda e: self._apply_rule_filter())
         w["lv_combo"] = lv_combo
@@ -1650,8 +1671,49 @@ class TradeExportApp:
 
                 # 等级条件
                 if rule_lv != "任意" and row_type in ("附魔书", "附魔装备"):
-                    if row_lv != rule_lv:
-                        continue
+                    if rule_lv == "可用最大值":
+                        if rule_ench != "全部":
+                            # 指定附魔：查该附魔的理论最大等级
+                            the_max = ENCHANT_MAX_LEVEL_MAP.get(rule_ench, 5)
+                            if row_type == "附魔书":
+                                if row_lv != str(the_max):
+                                    continue
+                            else:
+                                found_max = False
+                                for part in d2.split(";"):
+                                    part = part.strip()
+                                    if rule_ench in part:
+                                        p = part.rsplit(" ", 1)
+                                        if len(p) == 2 and p[1].isdigit() and int(p[1]) == the_max:
+                                            found_max = True
+                                            break
+                                if not found_max:
+                                    continue
+                        else:
+                            # 任意附魔：每行自身的附魔需达到其理论最大等级
+                            if row_type == "附魔书":
+                                row_max = ENCHANT_MAX_LEVEL_MAP.get(d1, 5)
+                                if row_lv != str(row_max):
+                                    continue
+                            else:
+                                all_max = True
+                                for part in d2.split(";"):
+                                    part = part.strip()
+                                    if not part:
+                                        continue
+                                    p = part.rsplit(" ", 1)
+                                    if len(p) == 2 and p[1].isdigit():
+                                        name = p[0]
+                                        lv = int(p[1])
+                                        ench_max = ENCHANT_MAX_LEVEL_MAP.get(name, 5)
+                                        if lv != ench_max:
+                                            all_max = False
+                                            break
+                                if not all_max:
+                                    continue
+                    else:
+                        if row_lv != rule_lv:
+                            continue
 
                 # 价格条件
                 if rule_price != "全部价格":
