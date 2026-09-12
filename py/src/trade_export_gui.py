@@ -17,7 +17,8 @@ from villager_trade_predictor import (
     is_suspicious_stew_entry, is_tipped_arrow_entry,
     is_dyed_equipment_entry, ENCHANTED_EQUIPMENT_PARAMS,
     ITEM_ENCHANTMENT_COMPAT, ON_TRADED_EQUIPMENT_ENCHANTMENTS,
-    NON_TREASURE_ENCHANTMENTS,
+    NON_TREASURE_ENCHANTMENTS, GAME_VERSIONS, DEFAULT_GAME_VERSION,
+    apply_pool_order,
     filter_pool_by_variant,
 )
 
@@ -159,15 +160,16 @@ def parse_pool_entry(entry: str) -> dict:
                 "data": {"entry": entry}}
 
 
-def get_pool_entry_list(prof: str, level: int, variant: str | None = None) -> list[dict]:
-    """获取某职业等级的池条目列表（含类型信息）。"""
+def get_pool_entry_list(prof: str, level: int, variant: str | None = None,
+                        game_version: str = DEFAULT_GAME_VERSION) -> list[dict]:
+    """获取某职业等级的池条目列表（含类型信息，按游戏版本调整池序）。"""
     data = ALL_TRADE_DATA.get(prof, {}).get(level, {})
     if not data or "pool" not in data:
         return []
 
-    pool = data["pool"]
+    pool = apply_pool_order(list(data["pool"]), prof, level, game_version)
     # 应用variant过滤（制图师、牧羊人、皮匠、渔夫）
-    pool = filter_pool_by_variant(list(pool), prof, level, variant)
+    pool = filter_pool_by_variant(pool, prof, level, variant)
 
     return [parse_pool_entry(e) for e in pool]
 
@@ -600,6 +602,17 @@ class TradeExportApp:
             seed_history.bind("<<ComboboxSelected>>", lambda e: self.seed_var.set(self.seed_history_var.get()))
 
         ttk.Button(row1, text="加载种子", command=self._load_seed).pack(side="left", padx=10)
+
+        ttk.Label(row1, text="游戏版本:").pack(side="left", padx=(10, 0))
+        self.game_version_var = tk.StringVar(
+            value=self.config.get("last_version", DEFAULT_GAME_VERSION))
+        self.game_version_combo = ttk.Combobox(
+            row1, textvariable=self.game_version_var,
+            values=list(GAME_VERSIONS), width=6, state="readonly"
+        )
+        self.game_version_combo.pack(side="left", padx=5)
+        self.game_version_combo.bind("<<ComboboxSelected>>", self._on_version_change)
+
         self.seed_status = ttk.Label(row1, text="", foreground="gray")
         self.seed_status.pack(side="left", padx=10)
 
@@ -772,7 +785,8 @@ class TradeExportApp:
         """根据当前职业/等级/群系刷新所有槽位条目下拉框。"""
         prof = self._get_profession_en()
         level = self._get_level()
-        self._pool_entries = get_pool_entry_list(prof, level, self._get_variant())
+        self._pool_entries = get_pool_entry_list(prof, level, self._get_variant(),
+                                                 self.game_version_var.get())
         all_labels = [e["label"] for e in self._pool_entries]
 
         data = ALL_TRADE_DATA.get(prof, {}).get(level, {})
@@ -1277,10 +1291,12 @@ class TradeExportApp:
             messagebox.showerror("错误", "种子格式错误，请输入十进制数字")
             return
 
-        self.predictor = VillagerTradePredictor(seed, variant=self._get_variant())
+        self.predictor = VillagerTradePredictor(seed, variant=self._get_variant(),
+                                                game_version=self.game_version_var.get())
         self.seed_status.config(text=f"已加载种子 {seed}", foreground="green")
 
         self.config["last_seed"] = seed_str
+        self.config["last_version"] = self.game_version_var.get()
         history = self.config.get("history", [])
         if seed_str in history:
             history.remove(seed_str)
@@ -1288,14 +1304,25 @@ class TradeExportApp:
         self.config["history"] = history[:10]
         save_config(self.config)
 
+    def _on_version_change(self, event=None):
+        """切换游戏版本：更新 predictor 与定位槽位（池序随版本变化）。"""
+        self.config["last_version"] = self.game_version_var.get()
+        save_config(self.config)
+        if self.predictor:
+            self.predictor.game_version = self.game_version_var.get()
+            self._refresh_pool_entries()
+
     def _generate_data(self):
         if not self.predictor:
             messagebox.showwarning("提示", "请先加载种子")
             return False
 
         variant = self._get_variant()
-        if self.predictor.variant != variant:
-            self.predictor = VillagerTradePredictor(self.predictor.world_seed, variant=variant)
+        if self.predictor.variant != variant or \
+                self.predictor.game_version != self.game_version_var.get():
+            self.predictor = VillagerTradePredictor(
+                self.predictor.world_seed, variant=variant,
+                game_version=self.game_version_var.get())
 
         try:
             start_offset = int(self.offset_var.get())

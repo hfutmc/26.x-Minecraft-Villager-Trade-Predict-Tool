@@ -1320,6 +1320,176 @@ ENCHANTED_EQUIPMENT_PARAMS = {
 # Weapon enchantments available on axes from weaponsmith (but not toolsmith)
 WEAPON_AXE_ENCHANTS = {"sharpness", "smite", "bane_of_arthropods", "unbreaking"}
 
+# ============================================================
+# Game version support (pool order differences)
+# 26.1 -> 26.2: 4 pools were reordered (members unchanged), verified by
+# diffing data/minecraft/tags/villager_trade between 26.1.2.jar and 26.2.jar:
+#   mason L4, shepherd L2/L3/L4. All other pools are identical.
+# Entry content changes in 26.2 (merchant_predicate namespacing, fletcher L5
+# wants swap) do not affect RNG consumption, so pool order is the only
+# difference that matters for prediction.
+# ============================================================
+
+GAME_VERSION_26_1 = "26.1"
+GAME_VERSION_26_2 = "26.2"
+GAME_VERSIONS = (GAME_VERSION_26_1, GAME_VERSION_26_2)
+DEFAULT_GAME_VERSION = GAME_VERSION_26_1
+
+# Full 26.2 pool order for the 4 reordered pools (taken from 26.2.jar tags)
+POOL_ORDER_26_2 = {
+    "mason": {
+        4: [
+            "minecraft:mason/4/quartz_emerald",
+            "minecraft:mason/4/emerald_white_terracotta",
+            "minecraft:mason/4/emerald_orange_terracotta",
+            "minecraft:mason/4/emerald_magenta_terracotta",
+            "minecraft:mason/4/emerald_light_blue_terracotta",
+            "minecraft:mason/4/emerald_yellow_terracotta",
+            "minecraft:mason/4/emerald_lime_terracotta",
+            "minecraft:mason/4/emerald_pink_terracotta",
+            "minecraft:mason/4/emerald_gray_terracotta",
+            "minecraft:mason/4/emerald_light_gray_terracotta",
+            "minecraft:mason/4/emerald_cyan_terracotta",
+            "minecraft:mason/4/emerald_purple_terracotta",
+            "minecraft:mason/4/emerald_blue_terracotta",
+            "minecraft:mason/4/emerald_brown_terracotta",
+            "minecraft:mason/4/emerald_green_terracotta",
+            "minecraft:mason/4/emerald_red_terracotta",
+            "minecraft:mason/4/emerald_black_terracotta",
+            "minecraft:mason/4/emerald_white_glazed_terracotta",
+            "minecraft:mason/4/emerald_orange_glazed_terracotta",
+            "minecraft:mason/4/emerald_magenta_glazed_terracotta",
+            "minecraft:mason/4/emerald_light_blue_glazed_terracotta",
+            "minecraft:mason/4/emerald_yellow_glazed_terracotta",
+            "minecraft:mason/4/emerald_lime_glazed_terracotta",
+            "minecraft:mason/4/emerald_pink_glazed_terracotta",
+            "minecraft:mason/4/emerald_gray_glazed_terracotta",
+            "minecraft:mason/4/emerald_light_gray_glazed_terracotta",
+            "minecraft:mason/4/emerald_cyan_glazed_terracotta",
+            "minecraft:mason/4/emerald_purple_glazed_terracotta",
+            "minecraft:mason/4/emerald_blue_glazed_terracotta",
+            "minecraft:mason/4/emerald_brown_glazed_terracotta",
+            "minecraft:mason/4/emerald_green_glazed_terracotta",
+            "minecraft:mason/4/emerald_red_glazed_terracotta",
+            "minecraft:mason/4/emerald_black_glazed_terracotta",
+        ],
+    },
+    "shepherd": {
+        2: [
+            "minecraft:shepherd/2/white_dye_emerald",
+            "minecraft:shepherd/2/gray_dye_emerald",
+            "minecraft:shepherd/2/black_dye_emerald",
+            "minecraft:shepherd/2/light_blue_dye_emerald",
+            "minecraft:shepherd/2/lime_dye_emerald",
+            "minecraft:shepherd/2/emerald_white_wool",
+            "minecraft:shepherd/2/emerald_orange_wool",
+            "minecraft:shepherd/2/emerald_magenta_wool",
+            "minecraft:shepherd/2/emerald_light_blue_wool",
+            "minecraft:shepherd/2/emerald_yellow_wool",
+            "minecraft:shepherd/2/emerald_lime_wool",
+            "minecraft:shepherd/2/emerald_pink_wool",
+            "minecraft:shepherd/2/emerald_gray_wool",
+            "minecraft:shepherd/2/emerald_light_gray_wool",
+            "minecraft:shepherd/2/emerald_cyan_wool",
+            "minecraft:shepherd/2/emerald_purple_wool",
+            "minecraft:shepherd/2/emerald_blue_wool",
+            "minecraft:shepherd/2/emerald_brown_wool",
+            "minecraft:shepherd/2/emerald_green_wool",
+            "minecraft:shepherd/2/emerald_red_wool",
+            "minecraft:shepherd/2/emerald_black_wool",
+            "minecraft:shepherd/2/emerald_white_carpet",
+            "minecraft:shepherd/2/emerald_orange_carpet",
+            "minecraft:shepherd/2/emerald_magenta_carpet",
+            "minecraft:shepherd/2/emerald_light_blue_carpet",
+            "minecraft:shepherd/2/emerald_yellow_carpet",
+            "minecraft:shepherd/2/emerald_lime_carpet",
+            "minecraft:shepherd/2/emerald_pink_carpet",
+            "minecraft:shepherd/2/emerald_gray_carpet",
+            "minecraft:shepherd/2/emerald_light_gray_carpet",
+            "minecraft:shepherd/2/emerald_cyan_carpet",
+            "minecraft:shepherd/2/emerald_purple_carpet",
+            "minecraft:shepherd/2/emerald_blue_carpet",
+            "minecraft:shepherd/2/emerald_brown_carpet",
+            "minecraft:shepherd/2/emerald_green_carpet",
+            "minecraft:shepherd/2/emerald_red_carpet",
+            "minecraft:shepherd/2/emerald_black_carpet",
+        ],
+        3: [
+            "minecraft:shepherd/3/yellow_dye_emerald",
+            "minecraft:shepherd/3/light_gray_dye_emerald",
+            "minecraft:shepherd/3/orange_dye_emerald",
+            "minecraft:shepherd/3/red_dye_emerald",
+            "minecraft:shepherd/3/pink_dye_emerald",
+            "minecraft:shepherd/3/emerald_white_bed",
+            "minecraft:shepherd/3/emerald_orange_bed",
+            "minecraft:shepherd/3/emerald_magenta_bed",
+            "minecraft:shepherd/3/emerald_light_blue_bed",
+            "minecraft:shepherd/3/emerald_yellow_bed",
+            "minecraft:shepherd/3/emerald_lime_bed",
+            "minecraft:shepherd/3/emerald_pink_bed",
+            "minecraft:shepherd/3/emerald_gray_bed",
+            "minecraft:shepherd/3/emerald_light_gray_bed",
+            "minecraft:shepherd/3/emerald_cyan_bed",
+            "minecraft:shepherd/3/emerald_purple_bed",
+            "minecraft:shepherd/3/emerald_blue_bed",
+            "minecraft:shepherd/3/emerald_brown_bed",
+            "minecraft:shepherd/3/emerald_green_bed",
+            "minecraft:shepherd/3/emerald_red_bed",
+            "minecraft:shepherd/3/emerald_black_bed",
+        ],
+        4: [
+            "minecraft:shepherd/4/brown_dye_emerald",
+            "minecraft:shepherd/4/purple_dye_emerald",
+            "minecraft:shepherd/4/blue_dye_emerald",
+            "minecraft:shepherd/4/green_dye_emerald",
+            "minecraft:shepherd/4/magenta_dye_emerald",
+            "minecraft:shepherd/4/cyan_dye_emerald",
+            "minecraft:shepherd/4/emerald_white_banner",
+            "minecraft:shepherd/4/emerald_orange_banner",
+            "minecraft:shepherd/4/emerald_magenta_banner",
+            "minecraft:shepherd/4/emerald_light_blue_banner",
+            "minecraft:shepherd/4/emerald_yellow_banner",
+            "minecraft:shepherd/4/emerald_lime_banner",
+            "minecraft:shepherd/4/emerald_pink_banner",
+            "minecraft:shepherd/4/emerald_gray_banner",
+            "minecraft:shepherd/4/emerald_light_gray_banner",
+            "minecraft:shepherd/4/emerald_cyan_banner",
+            "minecraft:shepherd/4/emerald_purple_banner",
+            "minecraft:shepherd/4/emerald_blue_banner",
+            "minecraft:shepherd/4/emerald_brown_banner",
+            "minecraft:shepherd/4/emerald_green_banner",
+            "minecraft:shepherd/4/emerald_red_banner",
+            "minecraft:shepherd/4/emerald_black_banner",
+        ],
+    },
+}
+
+
+def apply_pool_order(pool: list, profession: str, level: int,
+                     game_version: str) -> list:
+    """Return the pool adjusted for the game version (26.1 data is the base)."""
+    if game_version != GAME_VERSION_26_2:
+        return pool
+    override = POOL_ORDER_26_2.get(profession, {}).get(level)
+    if override is None:
+        return pool
+    return list(override)
+
+
+def _validate_pool_order_26_2():
+    """Fail fast at import if the 26.2 overrides don't match the 26.1 members."""
+    for prof, levels in POOL_ORDER_26_2.items():
+        for level, new_order in levels.items():
+            old = ALL_TRADE_DATA.get(prof, {}).get(level, {}).get("pool", [])
+            if sorted(old) != sorted(new_order):
+                raise ValueError(
+                    f"POOL_ORDER_26_2 members mismatch ALL_TRADE_DATA for "
+                    f"{prof} L{level}"
+                )
+
+
+_validate_pool_order_26_2()
+
 
 # ============================================================
 # Variant filtering (merchant_predicate)
@@ -1499,9 +1669,13 @@ class VillagerTradePredictor:
     4. Predict future trades at that offset
     """
 
-    def __init__(self, world_seed: int, variant: Optional[str] = None):
+    def __init__(self, world_seed: int, variant: Optional[str] = None,
+                 game_version: str = DEFAULT_GAME_VERSION):
         self.world_seed = u64(world_seed)
         self.variant = variant  # villager variant (biome-based): desert/jungle/plains/savanna/snow/swamp/taiga
+        if game_version not in GAME_VERSIONS:
+            raise ValueError(f"Unknown game version: {game_version}")
+        self.game_version = game_version
 
     def create_rng(self, profession: str, level: int) -> XoroshiroRandomSource:
         identifier = trade_set_id(profession, level)
@@ -1512,7 +1686,8 @@ class VillagerTradePredictor:
         data = ALL_TRADE_DATA.get(profession, {}).get(level, {})
         if not data:
             return [], 0, None
-        raw_pool = list(data["pool"])
+        raw_pool = apply_pool_order(list(data["pool"]), profession, level,
+                                    self.game_version)
         amount = data["amount"]
         filtered_pool = filter_pool_by_variant(raw_pool, profession, level, self.variant)
         return filtered_pool, amount, data
