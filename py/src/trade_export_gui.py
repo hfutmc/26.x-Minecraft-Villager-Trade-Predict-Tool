@@ -18,7 +18,7 @@ from villager_trade_predictor import (
     is_dyed_equipment_entry, ENCHANTED_EQUIPMENT_PARAMS,
     ITEM_ENCHANTMENT_COMPAT, ON_TRADED_EQUIPMENT_ENCHANTMENTS,
     NON_TREASURE_ENCHANTMENTS, GAME_VERSIONS, DEFAULT_GAME_VERSION,
-    apply_pool_order,
+    apply_pool_order, VARIANT_FILTERS,
     filter_pool_by_variant,
 )
 
@@ -578,7 +578,7 @@ class TradeExportApp:
     # UI 构建
     # ============================================================
     def _build_ui(self):
-        # ── 第一行：种子 + 职业 + 等级 + 群系 ──
+        # ── 第一行：种子 + 职业 + 等级 ──
         frame_seed = ttk.LabelFrame(self.root, text="基本设置", padding=10)
         frame_seed.pack(fill="x", padx=10, pady=5)
 
@@ -616,7 +616,7 @@ class TradeExportApp:
         self.seed_status = ttk.Label(row1, text="", foreground="gray")
         self.seed_status.pack(side="left", padx=10)
 
-        # 子行2：职业 + 等级 + 群系
+        # 子行2：职业 + 等级
         row2 = ttk.Frame(frame_seed)
         row2.pack(fill="x", pady=2)
 
@@ -640,15 +640,9 @@ class TradeExportApp:
         self.level_combo.pack(side="left", padx=5)
         self.level_combo.bind("<<ComboboxSelected>>", self._on_level_change)
 
-        ttk.Label(row2, text="群系变体:").pack(side="left", padx=(10, 0))
+        # 群系仅影响制图师L2/L4、渔夫L5（见 VARIANT_FILTERS），
+        # 选择器放在观测区与导出区，共用同一个 StringVar
         self.variant_var = tk.StringVar(value="默认(不过滤)")
-        self.variant_combo = ttk.Combobox(
-            row2, textvariable=self.variant_var,
-            values=["默认(不过滤)", "desert-沙漠", "jungle-丛林", "plains-平原",
-                    "savanna-热带草原", "snow-雪地", "swamp-沼泽", "taiga-针叶林"],
-            width=16, state="readonly"
-        )
-        self.variant_combo.pack(side="left", padx=5)
 
         # ── 节点定位：观测反查 ──
         # 折叠/展开切换按钮
@@ -660,9 +654,15 @@ class TradeExportApp:
         self.frame_locate = ttk.LabelFrame(self.root, text="节点定位（通过观测交易反查偏移）", padding=10)
         self.frame_locate.pack(fill="x", padx=10, pady=(0, 5))
 
-        # 多槽位输入区：每个槽位一行（条目 + 详情），按游戏内顺序排列
-        ttk.Label(self.frame_locate, text="填写本等级的所有交易槽位；多次观测请按刷新先后顺序添加：",
-                  foreground="gray", font=("", 8)).pack(anchor="w")
+        # 群系选择行（仅受影响池显示；置于面板首行保证可见性）
+        self.loc_variant_row = ttk.Frame(self.frame_locate)
+        self.loc_variant_row.pack(fill="x", pady=2)
+        self._loc_variant_anchor = ttk.Label(
+            self.frame_locate, text="填写本等级的所有交易槽位；多次观测请按刷新先后顺序添加：",
+            foreground="gray", font=("", 8))
+        self._loc_variant_anchor.pack(anchor="w")
+        self.loc_variant_combo, self.loc_variant_warn = \
+            self._build_variant_selector(self.loc_variant_row)
         self.locate_slots_frame = ttk.Frame(self.frame_locate)
         self.locate_slots_frame.pack(fill="x", pady=2)
 
@@ -712,6 +712,13 @@ class TradeExportApp:
         self.count_var = tk.StringVar(value="100")
         ttk.Entry(frame_params, textvariable=self.count_var, width=10).pack(side="left", padx=5)
         ttk.Label(frame_params, text="(后续N个节点)", foreground="gray", font=("", 8)).pack(side="left", padx=5)
+
+        # 群系选择（导出区，仅受影响池显示）
+        self.exp_variant_row = ttk.Frame(frame_params)
+        self.exp_variant_row.pack(side="left")
+        ttk.Separator(self.exp_variant_row, orient="vertical").pack(side="left", fill="y", padx=15, pady=2)
+        self.exp_variant_combo, self.exp_variant_warn = \
+            self._build_variant_selector(self.exp_variant_row)
 
         # ── 操作按钮 ──
         frame_actions = ttk.Frame(self.root)
@@ -777,6 +784,59 @@ class TradeExportApp:
 
         # 初始化池条目列表
         self._refresh_pool_entries()
+        # 初始化群系选择器可见性与警告
+        self._update_variant_visibility()
+
+    # ============================================================
+    # 群系选择器（观测区 + 导出区，共用 variant_var）
+    # ============================================================
+    VARIANT_OPTIONS = ["默认(不过滤)", "desert-沙漠", "jungle-丛林", "plains-平原",
+                       "savanna-热带草原", "snow-雪地", "swamp-沼泽", "taiga-针叶林"]
+
+    def _build_variant_selector(self, parent):
+        """在 parent 中构建：群系下拉 + 未选警告标签。"""
+        ttk.Label(parent, text="群系变体:").pack(side="left")
+        combo = ttk.Combobox(parent, textvariable=self.variant_var,
+                             values=self.VARIANT_OPTIONS, width=16, state="readonly")
+        combo.pack(side="left", padx=5)
+        combo.bind("<<ComboboxSelected>>", self._on_variant_change)
+        warn = ttk.Label(parent, text="⚠ 未选群系，此池结果可能不可信",
+                         foreground="#e67e22", font=("", 8))
+        warn.pack(side="left", padx=5)
+        return combo, warn
+
+    def _is_variant_affected(self) -> bool:
+        """当前职业/等级的池是否受群系变体影响。"""
+        return (self._get_profession_en(), self._get_level()) in VARIANT_FILTERS
+
+    def _update_variant_visibility(self):
+        """仅受群系影响的职业/等级显示选择器；同时刷新警告。"""
+        affected = self._is_variant_affected()
+        if affected:
+            # before= 固定在面板首行（pack_forget 后重挂会追加到末尾）
+            self.loc_variant_row.pack(fill="x", pady=2,
+                                      before=self._loc_variant_anchor)
+            self.exp_variant_row.pack(side="left")
+        else:
+            self.loc_variant_row.pack_forget()
+            self.exp_variant_row.pack_forget()
+        self._update_variant_warnings()
+
+    def _update_variant_warnings(self):
+        """受影响池未选群系时显示警告标签。"""
+        show = self._is_variant_affected() and self._get_variant() is None
+        for warn in (self.loc_variant_warn, self.exp_variant_warn):
+            if show:
+                warn.pack(side="left", padx=5)
+            else:
+                warn.pack_forget()
+
+    def _on_variant_change(self, event=None):
+        """群系变化：更新 predictor 与定位槽位（仅受影响池有效）。"""
+        if self.predictor:
+            self.predictor.variant = self._get_variant()
+        self._refresh_pool_entries()
+        self._update_variant_warnings()
 
     # ============================================================
     # 多槽位输入构建 + 池条目刷新
@@ -998,6 +1058,7 @@ class TradeExportApp:
         """职业变化：清空节点定位、刷新池条目。"""
         self._clear_observations()
         self._refresh_pool_entries()
+        self._update_variant_visibility()
         self.config["last_prof"] = self.prof_var.get()
         save_config(self.config)
 
@@ -1005,6 +1066,7 @@ class TradeExportApp:
         """等级变化：清空节点定位、刷新池条目。"""
         self._clear_observations()
         self._refresh_pool_entries()
+        self._update_variant_visibility()
         self.config["last_level"] = self.level_var.get()
         save_config(self.config)
 
